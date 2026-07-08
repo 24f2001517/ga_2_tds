@@ -91,3 +91,70 @@ async def verify(req: TokenRequest):
             status_code=401,
             content={"valid": False},
         )
+    
+import os
+import yaml
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Simulate the assigned OS environment variable if it isn't set on Render.
+# On Render you can instead define APP_API_KEY in Environment Variables.
+os.environ.setdefault("APP_API_KEY", "key-mj2o78a4dt")
+
+
+def to_bool(v):
+    if isinstance(v, bool):
+        return v
+    return str(v).lower() in ("true", "1", "yes", "on")
+
+
+@app.get("/effective-config")
+async def effective_config(set: list[str] = Query(default=[])):
+    cfg = {
+        "port": 8000,
+        "workers": 1,
+        "debug": False,
+        "log_level": "info",
+        "api_key": "default-secret-000",
+    }
+
+    # YAML layer
+    if os.path.exists("config.development.yaml"):
+        with open("config.development.yaml") as f:
+            y = yaml.safe_load(f) or {}
+            cfg.update(y)
+
+    # .env layer
+    if os.getenv("APP_PORT"):
+        cfg["port"] = os.getenv("APP_PORT")
+
+    if os.getenv("NUM_WORKERS"):
+        cfg["workers"] = os.getenv("NUM_WORKERS")
+
+    if os.getenv("APP_DEBUG"):
+        cfg["debug"] = os.getenv("APP_DEBUG")
+
+    if os.getenv("APP_LOG_LEVEL"):
+        cfg["log_level"] = os.getenv("APP_LOG_LEVEL")
+
+    # OS env layer
+    if os.getenv("APP_API_KEY"):
+        cfg["api_key"] = os.getenv("APP_API_KEY")
+
+    # CLI overrides
+    for item in set:
+        if "=" in item:
+            k, v = item.split("=", 1)
+            cfg[k] = v
+
+    # Type coercion
+    cfg["port"] = int(cfg["port"])
+    cfg["workers"] = int(cfg["workers"])
+    cfg["debug"] = to_bool(cfg["debug"])
+    cfg["log_level"] = str(cfg["log_level"])
+
+    # Mask secret
+    cfg["api_key"] = "****"
+
+    return cfg
